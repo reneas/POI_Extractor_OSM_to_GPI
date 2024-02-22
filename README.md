@@ -1,6 +1,11 @@
 # Super Easy Transformation of OSM Mapfiles to Garmin GPI
 
-## Steps:
+## Prerequisites
+you will have to install the follwing external tools:
+-  [`osmosis`](https://github.com/openstreetmap/osmosis)
+-  [`gpsbabel`](https://github.com/GPSBabel/gpsbabel)
+
+## Steps to use:
 
 #### 1. Download desired area as `*.pbf` mapfile from https://extract.bbbike.org/
 #### 2. Set your `working_path` and `pbf_file_name`
