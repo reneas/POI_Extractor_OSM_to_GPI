@@ -17,4 +17,5 @@ you will have to install the follwing external tools:
 #### 3. Download POI-Icons as `*.bmp` (for example from [this](https://www.pocketnavigation.de/poidownload/pocketnavigation/de/?device-format-id=4&country=DE#selection-step2) website)
 - The icons have to be named the same as the categories and be placed into `{working_path}/Icons`
 #### 4. Run the script with `python ./filter_nodes.py -pbf [pbf_file_name]` in your `working_path`
+- You don't need to specify the `*.pbf` file if there is only one in the directory. The script will automatically choose the first `*.pbf` file in the directory, if there are more than one present and no `-pbf` argument was given.
 #### Done!
