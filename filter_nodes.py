@@ -6,16 +6,32 @@ import subprocess
 import yaml
 import argparse
 
-# TODO: Make the script more flexible by using command line arguments
+
+# TODO add output format argument (gpi, csv, etc.)
+def get_default_pbf_file():
+    # Get the directory of the script
+    script_dir = Path(__file__).parent
+    # Find the first *.pbf file in the script directory
+    for pbf_file in script_dir.glob("*.pbf"):
+        return str(pbf_file)
+
 
 # Create the parser
-parser = argparse.ArgumentParser(description="declare the PBF file to process")
+parser = argparse.ArgumentParser(
+    description="Commandline tool for filtering OSM nodes from *.pbf files and converting them to GPI files for Garmin GPS devices."
+)
 # Add an argument for the PBF file
 parser.add_argument(
     "-pbf",
-    "--pbf_file",
-    default="map_alpentour.pbf",
-    help="The PBF file to process",
+    metavar="<*.pbf file>",
+    default=get_default_pbf_file(),
+    help="the *.pbf file to process",
+)
+parser.add_argument(
+    "-f",
+    metavar="<True/False>",
+    default=False,
+    help=f"Activate node filtering (default: {False})",
 )
 # Parse the arguments
 args = parser.parse_args()
@@ -23,20 +39,25 @@ args = parser.parse_args()
 
 #################### FUNCTIONS ####################
 def run_subprocess(command):
+    command_name = command.split()[0]  # Get the name of the command
+    print(f"Running \033[1m{command_name}\033[0m with command:\n{command}\n")
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
     output, error = process.communicate()
+    # TODO: why is the output printed in error?
+    # https://github.com/openstreetmap/osmosis/issues/146
     if output:
-        print("Output:", output.decode())
+        print(f"\033[1m{command_name}\033[0m output:\n{output.decode()}")
     if error:
-        print("Error:", error.decode())
+        print(f"\033[1m{command_name}\033[0m Error:\n{error.decode()}")
 
 
 def create_directory(path):
     """
     Create a directory and it's parents if they don't exist
     """
+    print(f"Creating directory: {path}\n")
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -44,7 +65,6 @@ def extract_nodes(pbf_file, poi, poi_dict, working_path):
     osm_raw_path = working_path / "osm_raw"
     create_directory(osm_raw_path)
     osmosis_command = f"osmosis --read-pbf {pbf_file} --node-key-value keyValueList={poi_dict[poi][1]} --write-xml {osm_raw_path}/{poi}.osm"
-    print(osmosis_command)
     run_subprocess(osmosis_command)
 
 
@@ -52,6 +72,7 @@ def filter_nodes(xml_file, dist):
     tree = ET.parse(xml_file)
     root = tree.getroot()
     nodes = []
+    print(f"Filtering nodes within {dist} meters...\n")
     for node in root.findall("node"):
         lat = float(node.get("lat"))
         lon = float(node.get("lon"))
@@ -74,6 +95,7 @@ def filter_nodes(xml_file, dist):
 def write_xml(root, working_path, poi):
     osm_filtered_path = working_path / "osm_filtered"
     create_directory(osm_filtered_path)
+    print(f"Writing filtered nodes to {osm_filtered_path}/filtered_{poi}.osm...\n")
     # Open the output file in write mode
     with open(f"{osm_filtered_path}/filtered_{poi}.osm", "w") as f:
         # Write the XML declaration
@@ -88,31 +110,44 @@ def write_xml(root, working_path, poi):
         f.write(xml_string)
 
 
-def create_gpi(working_path, poi):
+def create_gpi(working_path, inputdir, poi):
     iconpath = working_path / "Icons"
     gpipath = working_path / "GPI"
-    osm_filtered_path = working_path / "osm_filtered"
     create_directory(gpipath)
-    gpsbabel_command = f"gpsbabel -i osm -f {osm_filtered_path}/filtered_{poi}.osm -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp -F {gpipath}/{poi}.gpi"
-    print(gpsbabel_command)
-    run_subprocess(gpsbabel_command)
+    if inputdir == "osm_filtered":
+        osm_filtered_path = working_path / inputdir
+        gpsbabel_command = f"gpsbabel -i osm -f {osm_filtered_path}/filtered_{poi}.osm -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp -F {gpipath}/{poi}.gpi"
+        run_subprocess(gpsbabel_command)
+    else:
+        osm_raw_path = working_path / "osm_raw"
+        gpsbabel_command = f"gpsbabel -i osm -f {osm_raw_path}/{poi}.osm -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp -F {gpipath}/{poi}.gpi"
+        run_subprocess(gpsbabel_command)
 
 
 def main():
     working_path = Path(__file__).parent
-    pbf_file_name = args.pbf_file
-
+    pbf_file_name = args.pbf
+    print(
+        f"\nProcessing {pbf_file_name}...\nFiltering is set to \033[1m{args.f}\033[0m\n"
+    )
     with open("POIs.yaml", "r") as poi_file:
         poi_dict = yaml.safe_load(poi_file)
 
     for poi in poi_dict:
-        extract_nodes(f"{working_path}/{pbf_file_name}", poi, poi_dict, working_path)
-        write_xml(
-            filter_nodes(f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]),
-            working_path,
-            poi,
-        )
-        create_gpi(working_path, poi)
+        if args.f:  # If filtering is activated
+            extract_nodes(pbf_file_name, poi, poi_dict, working_path)
+            filtered_nodes = filter_nodes(
+                f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]
+            )
+            write_xml(
+                filtered_nodes,
+                working_path,
+                poi,
+            )
+            create_gpi(working_path, "osm_filtered", poi)
+        else:
+            extract_nodes(pbf_file_name, poi, poi_dict, working_path)
+            create_gpi(working_path, "osm_raw", poi)
 
 
 if __name__ == "__main__":
