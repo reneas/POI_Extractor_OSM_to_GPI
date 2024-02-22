@@ -2,11 +2,23 @@ from haversine import haversine, Unit
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import re
-import os
 import subprocess
 import yaml
+import argparse
 
 # TODO: Make the script more flexible by using command line arguments
+
+# Create the parser
+parser = argparse.ArgumentParser(description="declare the PBF file to process")
+# Add an argument for the PBF file
+parser.add_argument(
+    "-pbf",
+    "--pbf_file",
+    default="map_alpentour.pbf",
+    help="The PBF file to process",
+)
+# Parse the arguments
+args = parser.parse_args()
 
 
 #################### FUNCTIONS ####################
@@ -88,8 +100,7 @@ def create_gpi(working_path, poi):
 
 def main():
     working_path = Path(__file__).parent
-    print(working_path)
-    pbf_file_name = "map_alpentour.pbf"
+    pbf_file_name = args.pbf_file
 
     with open("POIs.yaml", "r") as poi_file:
         poi_dict = yaml.safe_load(poi_file)
