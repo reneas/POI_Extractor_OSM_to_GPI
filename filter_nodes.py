@@ -2,6 +2,7 @@ from haversine import haversine, Unit
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import re
+import sys
 import subprocess
 import yaml
 import argparse
@@ -47,6 +48,10 @@ def run_subprocess(command):
     output, _ = process.communicate()
     if process.returncode != 0:  # If the subprocess failed
         print(f"\033[1m\033[31m\033[4m{command_name} Error:\033[0m\n{output.decode()}")
+        print(
+            f"\033[1m\033[31m\033[4m{command_name} failed with exit code {process.returncode}\033[0m"
+        )
+        sys.exit(1)  # Stop the script with a non-zero exit code
     else:
         if command_name == "osmosis":
             print(f"{command_name} output:\n{output.decode()}")
