@@ -1,0 +1,27 @@
+Camping:
+  - 300
+  - tourism.camp_pitch,tourism.camp_site,tourism.caravan_site
+Fahrrad:
+  - 100
+  - amenity.bicycle_repair_station,shop.bicycle
+Fastfood:
+  - 100
+  - shop.bakery,amenity.fast_food
+Hotel:
+  - 200
+  - tourism.hostel,tourism.hotel,tourism.motel,tourism.apartment,tourism.guest_house
+Hütte:
+  - 300
+  - tourism.alpine_hut,tourism.wilderness_hut
+Icecream:
+  - 100
+  - amenity.ice_cream
+Picknick:
+  - 1000
+  - amenity.bench,leisure.picnic_table,tourism.picnic_site
+Supermarkt:
+  - 100
+  - shop.convenience,shop.supermarket,shop.food
+Wasser:
+  - 150
+  - emergency.drinking_water,amenity.drinking_water,natural.spring
