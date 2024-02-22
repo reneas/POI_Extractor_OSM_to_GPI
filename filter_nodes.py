@@ -1,11 +1,15 @@
 from haversine import haversine, Unit
 from pathlib import Path
+from multiprocessing import Pool
+import multiprocessing
 import xml.etree.ElementTree as ET
 import re
 import sys
 import subprocess
 import yaml
 import argparse
+import time
+import html
 
 
 # TODO add output format argument (gpi, csv, etc.)
@@ -104,6 +108,33 @@ def extract_nodes(pbf_file, poi, poi_dict, working_path):
         print(f"An error occurred: {str(e)}")
 
 
+# def filter_nodes(xml_file, dist):
+#     # TODO: Show how many nodes were filtered out in each node
+#     try:
+#         tree = ET.parse(xml_file)
+#     except ET.ParseError:
+#         print(f"Error: The file {xml_file} is not a well-formed XML file.")
+#         sys.exit(1)
+#     root = tree.getroot()
+#     nodes = []
+#     print(f"Filtering out nodes within {dist} meters...")
+#     for node in root.findall("node"):
+#         lat = float(node.get("lat"))
+#         lon = float(node.get("lon"))
+#         if nodes:
+#             for n in nodes:
+#                 if (
+#                     haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist
+#                 ):
+#                     root.remove(node)
+#                     break
+#             else:
+#                 nodes.append((lat, lon, node))
+#         else:
+#             nodes.append((lat, lon, node))
+#     return root
+
+
 def filter_nodes(xml_file, dist):
     try:
         tree = ET.parse(xml_file)
@@ -118,17 +149,27 @@ def filter_nodes(xml_file, dist):
         lon = float(node.get("lon"))
         if nodes:
             for n in nodes:
-                if (
-                    haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist
-                ):  # dist meters distance between nodes is allowed
-                    # print(haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS))
-                    # print((lat, lon), (n[0], n[1]))
+                if haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist:
                     root.remove(node)
                     break
             else:
                 nodes.append((lat, lon, node))
         else:
             nodes.append((lat, lon, node))
+
+        # Extract certain tags and write them into the node id
+        # write the tags in the order of tag_order
+        tag_order = ["amenity", "shop", "website", "opening_hours"]
+        tags = [tag for tag in node.findall("tag") if tag.get("k") in tag_order]
+        tags.sort(key=lambda tag: tag_order.index(tag.get("k")))
+        # add a separator between the tags and every 35 chars inside one tag
+        tag_values = []
+        for tag in tags:
+            tag_value = tag.get("v")
+            for i in range(35, len(tag_value), 35):
+                tag_value = tag_value[:i] + "\\" + tag_value[i:]
+            tag_values.append(tag_value)
+        node.set("id", "\\".join(tag_values))
     return root
 
 
@@ -145,6 +186,8 @@ def write_xml(root, working_path, poi):
             xml_string = ET.tostring(root, encoding="utf-8", method="xml")
             # Decode bytes to string
             xml_string = xml_string.decode("utf-8")
+            # Replace all '\' characters with '&#xA;'
+            xml_string = xml_string.replace("\\", "&#xA;")
             # Remove spaces before />
             xml_string = re.sub(" />", "/>", xml_string)
             # Write the modified XML string to the file
@@ -194,10 +237,74 @@ def create_gpi(working_path, inputdir, poi):
         print(f"An error occurred: {str(e)}")
 
 
+def process_poi(poi, pbf_file_name, poi_dict, working_path, filtering):
+    try:
+        extract_nodes(pbf_file_name, poi, poi_dict, working_path)
+        if filtering:  # If filtering is activated
+            filtered_nodes = filter_nodes(
+                f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]
+            )
+            write_xml(
+                filtered_nodes,
+                working_path,
+                poi,
+            )
+            create_gpi(working_path, "osm_filtered", poi)
+        else:
+            create_gpi(working_path, "osm_raw", poi)
+    except Exception as e:
+        print(f"An error occurred while processing POI '{poi}': {str(e)}")
+
+
+############ MULTIPROCESSING ############
+
+# def main(pbf_file_name, filtering):
+#     start_time = time.time()
+#     working_path = Path(__file__).parent
+#     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
+#     print(type(filtering))
+#     if filtering:  # If filtering is activated Green
+#         print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
+#     else:  # If filtering is deactivated Red
+#         print(f"\nFiltering is set to \033[1m\033[31m{filtering}\033[0m\n")
+
+#     try:
+#         with open("POIs.yaml", "r") as poi_file:
+#             poi_dict = yaml.safe_load(poi_file)
+#     except FileNotFoundError:
+#         print("POIs.yaml file not found.")
+#         return
+
+#     # Get the number of cores in the CPU
+#     num_cores = multiprocessing.cpu_count()
+#     # Use two less than the number of cores
+#     num_processes = max(1, num_cores - 2)
+#     print(
+#         f"Starting multiprocessing. Using {num_processes} of {multiprocessing.cpu_count()} cores"
+#     )
+#     with Pool(num_processes) as p:
+#         p.starmap(
+#             process_poi,
+#             [
+#                 (poi, pbf_file_name, poi_dict, working_path, filtering)
+#                 for poi in poi_dict
+#             ],
+#         )
+#     end_time = time.time()
+
+#     # Print the total time
+#     total_time = end_time - start_time
+#     print(f"Total time: {total_time} seconds")
+
+
+############# NORMAL PROCESSING #############
+
+
 def main(pbf_file_name, filtering):
+    start_time = time.time()
     working_path = Path(__file__).parent
     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
-    print(type(filtering))
+
     if filtering:  # If filtering is activated Green
         print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
     else:  # If filtering is deactivated Red
@@ -227,6 +334,11 @@ def main(pbf_file_name, filtering):
                 create_gpi(working_path, "osm_raw", poi)
         except Exception as e:
             print(f"An error occurred while processing POI '{poi}': {str(e)}")
+    end_time = time.time()
+
+    # Print the total time
+    total_time = end_time - start_time
+    print(f"\nTotal time: {total_time:.2f} seconds")
 
 
 if __name__ == "__main__":
