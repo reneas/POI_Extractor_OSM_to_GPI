@@ -114,7 +114,7 @@ def create_directory(path):
 
 def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
     try:
-        osm_raw_path = working_path / "osm_raw"
+        osm_raw_path = os.path.join(f"{working_path}", "osm_raw")
         create_directory(osm_raw_path)
         osmosis_command = textwrap.dedent(
             f"""
@@ -189,7 +189,7 @@ def filter_xml(xml_file, dist):
 
 def write_xml(root, working_path, poi):
     try:
-        osm_filtered_path = working_path / "osm_filtered"
+        osm_filtered_path = os.path.join(f"{working_path}", "osm_filtered")
         create_directory(osm_filtered_path)
         print(f"Writing filtered nodes to {osm_filtered_path}/filtered_{poi}.osm...\n")
         # Open the output file in write mode
@@ -223,11 +223,11 @@ def write_xml(root, working_path, poi):
 
 def create_gpi_gpsbabel(working_path, inputdir, poi):
     try:
-        iconpath = working_path / "Icons"
-        gpipath = working_path / "GPI"
+        iconpath = os.path.join(f"{working_path}", "Icons")
+        gpipath = os.path.join(f"{working_path}", "GPI")
         create_directory(gpipath)
         if inputdir == "osm_filtered":
-            osm_filtered_path = working_path / inputdir
+            osm_filtered_path = os.path.join(f"{working_path}", "osm_filtered")
             gpsbabel_command = textwrap.dedent(
                 f"""
             gpsbabel \\
@@ -238,7 +238,7 @@ def create_gpi_gpsbabel(working_path, inputdir, poi):
             )
 
         else:
-            osm_raw_path = working_path / inputdir
+            osm_raw_path = os.path.join(f"{working_path}", f"{inputdir}")
             gpsbabel_command = textwrap.dedent(
                 f"""
             gpsbabel \\
@@ -279,7 +279,9 @@ def process_poi(poi, pbf_file_name, poi_dict, working_path):
         extract_nodes_osmosis(pbf_file_name, poi, poi_dict, working_path)
         if is_filtering_activated(args.f):
             filtered_nodes = filter_xml(
-                f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]
+                # f"{working_path}/osm_raw/{poi}.osm"
+                f"{os.path.join(f'{working_path}', 'osm_raw', f'{poi}.osm')}",
+                poi_dict[poi][0],
             )
             write_xml(
                 filtered_nodes,
@@ -348,7 +350,9 @@ def main_single(pbf_file_name):
             extract_nodes_osmosis(pbf_file_name, poi, poi_dict, working_path)
             if is_filtering_activated(args.f):
                 filtered_nodes = filter_xml(
-                    f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]
+                    # f"{working_path}/osm_raw/{poi}.osm"
+                    f"{os.path.join(f'{working_path}', 'osm_raw', f'{poi}.osm')}",
+                    poi_dict[poi][0],
                 )
                 write_xml(
                     filtered_nodes,
