@@ -1,8 +1,12 @@
+#! /usr/bin/env python3
+
 from haversine import haversine, Unit
 from pathlib import Path
 from multiprocessing import Pool
 import multiprocessing
 import xml.etree.ElementTree as ET
+import os
+import glob
 import re
 import sys
 import subprocess
@@ -13,17 +17,23 @@ import time
 
 # TODO add output format argument (gpi, csv, etc.)
 def get_default_pbf_file():
-    # Get the directory of the script
-    script_dir = Path(__file__).parent
-    # Find the first *.pbf file in the script directory
-    for pbf_file in script_dir.glob("*.pbf"):
-        return str(pbf_file)
+    try:
+        # Get the directory of the script
+        path_str = os.getcwd()
+        start_dir = Path(path_str)
+        # Find the first *.pbf file in the script directory
+        for pbf_file in start_dir.glob("*.pbf"):
+            return str(pbf_file)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
 
 
 # Create the parser
 parser = argparse.ArgumentParser(
     description="Commandline tool for filtering OSM nodes from *.pbf files and converting them to GPI files for Garmin GPS devices."
 )
+
 # Add an argument for the PBF file
 parser.add_argument(
     "-pbf",
@@ -80,7 +90,7 @@ def create_directory(path):
     Create a directory and its parents if they don't exist
     """
     try:
-        if not path.exists():
+        if not os.path.exists(path):
             print(f"Creating directory: {path}\n")
             path.mkdir(parents=True)
     except PermissionError:
@@ -89,7 +99,7 @@ def create_directory(path):
         print(f"Error: Unable to create directory: {path}. Reason: {e.strerror}")
 
 
-def extract_nodes(pbf_file, poi, poi_dict, working_path):
+def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
     try:
         osm_raw_path = working_path / "osm_raw"
         create_directory(osm_raw_path)
@@ -107,7 +117,7 @@ def extract_nodes(pbf_file, poi, poi_dict, working_path):
         print(f"An error occurred: {str(e)}")
 
 
-def filter_nodes(xml_file, dist):
+def filter_xml(xml_file, dist):
     # TODO: Show how many nodes were filtered out in each node
     try:
         tree = ET.parse(xml_file)
@@ -177,7 +187,7 @@ def write_xml(root, working_path, poi):
         print(f"An error occurred: {str(e)}")
 
 
-def create_gpi(working_path, inputdir, poi):
+def create_gpi_gpsbabel(working_path, inputdir, poi):
     try:
         iconpath = working_path / "Icons"
         gpipath = working_path / "GPI"
@@ -210,11 +220,23 @@ def create_gpi(working_path, inputdir, poi):
         print(f"An error occurred: {str(e)}")
 
 
-def process_poi(poi, pbf_file_name, poi_dict, working_path, filtering):
+def is_filtering_activated(filter_arg):
+    if filter_arg:
+        print(f"\nFiltering is set to \033[1m\033[32m{filter_arg}\033[0m\n")
+        return True
+    else:
+        print(f"\nFiltering is set to \033[1m\033[31m{filter_arg}\033[0m\n")
+        return False
+
+
+############ MULTIPROCESSING ############
+
+
+def process_poi(poi, pbf_file_name, poi_dict, working_path):
     try:
-        extract_nodes(pbf_file_name, poi, poi_dict, working_path)
-        if filtering:  # If filtering is activated
-            filtered_nodes = filter_nodes(
+        extract_nodes_osmosis(pbf_file_name, poi, poi_dict, working_path)
+        if is_filtering_activated(args.f):
+            filtered_nodes = filter_xml(
                 f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]
             )
             write_xml(
@@ -222,17 +244,14 @@ def process_poi(poi, pbf_file_name, poi_dict, working_path, filtering):
                 working_path,
                 poi,
             )
-            create_gpi(working_path, "osm_filtered", poi)
+            create_gpi_gpsbabel(working_path, "osm_filtered", poi)
         else:
-            create_gpi(working_path, "osm_raw", poi)
+            create_gpi_gpsbabel(working_path, "osm_raw", poi)
     except Exception as e:
         print(f"An error occurred while processing POI '{poi}': {str(e)}")
 
 
-############ MULTIPROCESSING ############
-
-
-def main_multi(pbf_file_name, filtering):
+def main_multi(pbf_file_name):
     start_time = time.time()
     working_path = Path(__file__).parent
     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
@@ -244,11 +263,7 @@ def main_multi(pbf_file_name, filtering):
     print(
         f"Starting multiprocessing. Using {num_processes} of {multiprocessing.cpu_count()} cores"
     )
-    if filtering:  # If filtering is activated Green
-        print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
-    else:  # If filtering is deactivated Red
-        print(f"\nFiltering is set to \033[1m\033[31m{filtering}\033[0m\n")
-
+    is_filtering_activated(args.f)
     try:
         with open("POIs.yaml", "r") as poi_file:
             poi_dict = yaml.safe_load(poi_file)
@@ -259,10 +274,7 @@ def main_multi(pbf_file_name, filtering):
     with Pool(num_processes) as p:
         p.starmap(
             process_poi,
-            [
-                (poi, pbf_file_name, poi_dict, working_path, filtering)
-                for poi in poi_dict
-            ],
+            [(poi, pbf_file_name, poi_dict, working_path) for poi in poi_dict],
         )
     end_time = time.time()
 
@@ -274,15 +286,14 @@ def main_multi(pbf_file_name, filtering):
 ############# NORMAL PROCESSING #############
 
 
-def main_single(pbf_file_name, filtering):
+def main_single(pbf_file_name):
     start_time = time.time()
-    working_path = Path(__file__).parent
+    path_str = os.getcwd()
+    working_path = Path(path_str)
     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
     print(f"\n\033[1mUsing single processing...\033[0m")
-    if filtering:  # If filtering is activated Green
-        print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
-    else:  # If filtering is deactivated Red
-        print(f"\nFiltering is set to \033[1m\033[31m{filtering}\033[0m\n")
+
+    is_filtering_activated(args.f)
 
     try:
         with open("POIs.yaml", "r") as poi_file:
@@ -293,9 +304,9 @@ def main_single(pbf_file_name, filtering):
 
     for poi in poi_dict:
         try:
-            extract_nodes(pbf_file_name, poi, poi_dict, working_path)
-            if filtering:  # If filtering is activated
-                filtered_nodes = filter_nodes(
+            extract_nodes_osmosis(pbf_file_name, poi, poi_dict, working_path)
+            if is_filtering_activated(args.f):
+                filtered_nodes = filter_xml(
                     f"{working_path}/osm_raw/{poi}.osm", poi_dict[poi][0]
                 )
                 write_xml(
@@ -303,9 +314,9 @@ def main_single(pbf_file_name, filtering):
                     working_path,
                     poi,
                 )
-                create_gpi(working_path, "osm_filtered", poi)
+                create_gpi_gpsbabel(working_path, "osm_filtered", poi)
             else:
-                create_gpi(working_path, "osm_raw", poi)
+                create_gpi_gpsbabel(working_path, "osm_raw", poi)
         except Exception as e:
             print(f"An error occurred while processing POI '{poi}': {str(e)}")
     end_time = time.time()
@@ -317,6 +328,6 @@ def main_single(pbf_file_name, filtering):
 
 if __name__ == "__main__":
     if args.m:
-        main_multi(args.pbf, args.f)
+        main_multi(args.pbf)
     else:
-        main_single(args.pbf, args.f)
+        main_single(args.pbf)
