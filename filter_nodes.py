@@ -9,7 +9,6 @@ import subprocess
 import yaml
 import argparse
 import time
-import html
 
 
 # TODO add output format argument (gpi, csv, etc.)
@@ -28,29 +27,21 @@ parser = argparse.ArgumentParser(
 # Add an argument for the PBF file
 parser.add_argument(
     "-pbf",
-    metavar="<*.pbf file>",
     default=get_default_pbf_file(),
-    help="the *.pbf file to process",
+    help="The *.pbf file to process. Default: Uses the alphabetically first *.pbf file in the script directory.",
 )
 parser.add_argument(
     "-f",
-    metavar="<True/False>",
-    type=lambda s: s.lower(),  # Convert the string to lowercase
-    default="True",
-    choices=["true", "false"],
-    help=f"Activate node filtering (default: True)",
+    action="store_false",
+    help=f"Deactivate node filtering (default: Activated). If deactivated, all nodes will be extracted. If activated, nodes within a certain distance of each other will be filtered out. The distance is specified in the POIs.yaml file.",
 )
 parser.add_argument(
     "-m",
-    metavar="<True/False>",
-    type=lambda s: s.lower(),  # Convert the string to lowercase
-    default="False",
-    choices=["true", "false"],
-    help=f"Activate multiprocessing (default: False)",
+    action="store_true",
+    help=f"Activate multiprocessing (default: Single-Core-Processing). Useful for large *.pbf files. This uses ALL YOUR CORES MINUS TWO! Note: Multiprocessing might not work on Windows. Use single processing if you encounter any issues.",
 )
 # Parse the arguments
 args = parser.parse_args()
-args.f = args.f == "true"  # Convert the string to a boolean
 
 
 #################### FUNCTIONS ####################
@@ -325,7 +316,7 @@ def main_single(pbf_file_name, filtering):
 
 
 if __name__ == "__main__":
-    if args.m == "true":
+    if args.m:
         main_multi(args.pbf, args.f)
     else:
         main_single(args.pbf, args.f)
