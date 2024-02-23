@@ -5,7 +5,7 @@ Fahrrad:
   - 100
   - amenity.bicycle_repair_station,shop.bicycle
 Fastfood:
-  - 100
+  - 500
   - shop.bakery,amenity.fast_food
 Hotel:
   - 200

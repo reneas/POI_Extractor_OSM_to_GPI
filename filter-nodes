@@ -16,7 +16,18 @@ import argparse
 import time
 
 
-# TODO add output format argument (gpi, csv, etc.)
+def print_red(text):
+    error_message = print(f"\033[1m\033[31m{text}\033[0m")
+    return error_message
+
+
+def print_green(text):
+    success_message = print(f"\033[1m\033[32m{text}\033[0m")
+    return success_message
+
+
+# TODO add output format argument (gpi, csv, etc.)?
+# maybe unneccesary
 def get_default_pbf_file():
     try:
         # Get the directory of the script
@@ -24,11 +35,11 @@ def get_default_pbf_file():
         # Find the first *.pbf file in the script directory
         pbf_file = next(start_dir.glob("*.pbf"), None)
         if pbf_file is None:
-            print("Error: No *.pbf file found in the script directory.")
+            print_red("Error: No *.pbf file found in the script directory.")
             sys.exit(1)
         return str(pbf_file)
     except Exception as e:
-        print(f"An error occurred while trying to read the *.pbf file: {e}")
+        print_red(f"An error occurred while trying to read the *.pbf file: {e}")
         sys.exit(1)
 
 
@@ -74,17 +85,15 @@ def run_subprocess(command):
             shell=True,
             check=True,
         )
-        if command_name == "osmosis":
+        if command_name == "osmosis":  # osmosis has a command feedback
             print(f"{command_name} output:\n{result.stdout.decode()}")
-        print(f"\033[1m\033[32m{command_name} finished successfully\033[0m")
+        print_green(f"{command_name} finished successfully")
         return result.returncode
     except subprocess.CalledProcessError as e:
-        print(
-            f"\033[1m\033[31m\033[4m{command_name} Error:\033[0m\n{e.output.decode()}"
-        )
+        print_red(f"{command_name} Error:\n{e.output.decode()}")
         if command_name in error_messages:
-            print(f"\033[1m\033[31m\033[4m{error_messages[command_name]}\033[0m\n")
-        sys.exit(1)  # Stop the script with a non-zero exit code
+            print_red(f"{error_messages[command_name]}\n")
+        sys.exit(1)
 
 
 def create_directory(path):
@@ -96,9 +105,11 @@ def create_directory(path):
             print(f"Creating directory: {path}\n")
             path.mkdir(parents=True)
     except PermissionError:
-        print(f"Error: Permission denied when trying to create directory: {path}")
+        print_red(f"Error: Permission denied when trying to create directory: {path}")
+        sys.exit(1)
     except OSError as e:
-        print(f"Error: Unable to create directory: {path}. Reason: {e.strerror}")
+        print_red(f"Error: Unable to create directory: {path}. Reason: {e.strerror}")
+        sys.exit(1)
 
 
 def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
@@ -114,49 +125,65 @@ def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
         )
         exit_status = run_subprocess(osmosis_command)
         if exit_status == 0:  # If the subprocess was successful
-            print(f'Successfully extracted "{poi}" nodes to {osm_raw_path}/{poi}.osm')
+            print(
+                f'\033[1mSuccessfully extracted "{poi}" nodes to {osm_raw_path}/{poi}.osm\033[0m'
+            )
     except KeyError:
-        print(f"Error: The POI '{poi}' is not found in the POI dictionary.")
+        print_red(f"Error: The POI '{poi}' is not found in the POI dictionary.")
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        print_red(f"An error occurred: {str(e)}")
 
 
 def filter_xml(xml_file, dist):
-    # TODO: Show how many nodes were filtered out in each node
+    xml_filename = Path(xml_file).name
     try:
-        tree = ET.parse(xml_file)
+        tree = ET.parse(xml_file)  # Parse the XML file
     except ET.ParseError:
-        print(f"Error: The file {xml_file} is not a well-formed XML file.")
+        print_red(f"ParseError: The file {xml_filename} is not a well-formed XML file.")
         sys.exit(1)
-    root = tree.getroot()
+    root = tree.getroot()  # Get the root of the tree
     nodes = []
-    print(f"Filtering out nodes within {dist} meters...")
+    print(
+        f"Filtering out nodes from {xml_filename} within {dist} meters of each other..."
+    )
+    # TODO: Show how many nodes were filtered out in each node
+    removed_nodes = 0  # Counter for removed nodes
+    durchlauf = 0
     for node in root.findall("node"):
+        tag_values = []  # List to store the tag values
         lat = float(node.get("lat"))
         lon = float(node.get("lon"))
         if nodes:
             for n in nodes:
                 if haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist:
-                    root.remove(node)
+                    root.remove(node)  # Remove the node from the tree
+                    removed_nodes += 1  # Increment the counter
                     break
+                durchlauf += 1
+                print(f"filtering run no. {durchlauf}")
+                print(f"removed {removed_nodes} this run\n")
+                removed_nodes = 0
             else:
                 nodes.append((lat, lon, node))
         else:
             nodes.append((lat, lon, node))
-
         # Extract certain tags and write them into the node id
         # write the tags in the order of tag_order
         tag_order = ["amenity", "shop", "website", "opening_hours"]
         tags = [tag for tag in node.findall("tag") if tag.get("k") in tag_order]
         tags.sort(key=lambda tag: tag_order.index(tag.get("k")))
+
+        # # Add removed_nodes to tag_values
+        # tag_values.append(str(removed_nodes))
+
         # add a separator between the tags and every 35 chars inside one tag
-        tag_values = []
         for tag in tags:
             tag_value = tag.get("v")
             for i in range(35, len(tag_value), 35):
                 tag_value = tag_value[:i] + "\\" + tag_value[i:]
             tag_values.append(tag_value)
         node.set("id", "\\".join(tag_values))
+    # print(f"Total removed nodes: {removed_nodes}")
     return root
 
 
@@ -179,19 +206,19 @@ def write_xml(root, working_path, poi):
             xml_string = re.sub(" />", "/>", xml_string)
             # Write the modified XML string to the file
             f.write(xml_string)
-        print(
+        print_green(
             f"Successfully wrote filtered nodes to {osm_filtered_path}/filtered_{poi}.osm\n"
         )
     except PermissionError:
-        print(
+        print_red(
             f"Error: Permission denied when trying to write to file: {osm_filtered_path}/filtered_{poi}.osm"
         )
     except OSError as e:
-        print(
+        print_red(
             f"Error: Unable to write to file: {osm_filtered_path}/filtered_{poi}.osm. Reason: {e.strerror}"
         )
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        print_red(f"An error occurred: {str(e)}")
 
 
 def create_gpi_gpsbabel(working_path, inputdir, poi):
@@ -222,11 +249,15 @@ def create_gpi_gpsbabel(working_path, inputdir, poi):
             )
         exit_status = run_subprocess(gpsbabel_command)
         if exit_status == 0:
-            print(f"Created GPI file{gpipath}/{poi}.gpi\n")
+            print(f"\033[1mSuccessfully created GPI file{gpipath}/{poi}.gpi\033[0m\n")
     except FileNotFoundError:
-        print(f"Error: File not found when trying to create GPI file for POI: {poi}")
+        print_red(
+            f"Error: File not found when trying to create GPI file for POI: {poi}"
+        )
     except PermissionError:
-        print(f"Error: Permission denied when trying to create GPI file for POI: {poi}")
+        print_red(
+            f"Error: Permission denied when trying to create GPI file for POI: {poi}"
+        )
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
@@ -259,7 +290,7 @@ def process_poi(poi, pbf_file_name, poi_dict, working_path):
         else:
             create_gpi_gpsbabel(working_path, "osm_raw", poi)
     except Exception as e:
-        print(f"An error occurred while processing POI '{poi}': {str(e)}")
+        print_red(f"An error occurred while processing POI '{poi}': {str(e)}")
 
 
 def main_multi(pbf_file_name):
@@ -279,7 +310,7 @@ def main_multi(pbf_file_name):
         with open("POIs.yaml", "r") as poi_file:
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
-        print("POIs.yaml file not found.")
+        print_red("POIs.yaml file not found.")
         return
 
     with Pool(num_processes) as p:
@@ -309,7 +340,7 @@ def main_single(pbf_file_name):
         with open("POIs.yaml", "r") as poi_file:
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
-        print("POIs.yaml file not found.")
+        print_red("POIs.yaml file not found.")
         return
 
     for poi in poi_dict:
@@ -328,7 +359,7 @@ def main_single(pbf_file_name):
             else:
                 create_gpi_gpsbabel(working_path, "osm_raw", poi)
         except Exception as e:
-            print(f"An error occurred while processing POI '{poi}': {str(e)}")
+            print_red(f"An error occurred while processing POI '{poi}': {str(e)}")
     end_time = time.time()
 
     # Print the total time
