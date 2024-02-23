@@ -6,6 +6,7 @@ from multiprocessing import Pool
 import multiprocessing
 import xml.etree.ElementTree as ET
 import os
+import textwrap
 import glob
 import re
 import sys
@@ -19,14 +20,16 @@ import time
 def get_default_pbf_file():
     try:
         # Get the directory of the script
-        path_str = os.getcwd()
-        start_dir = Path(path_str)
+        start_dir = Path.cwd()
         # Find the first *.pbf file in the script directory
-        for pbf_file in start_dir.glob("*.pbf"):
-            return str(pbf_file)
+        pbf_file = next(start_dir.glob("*.pbf"), None)
+        if pbf_file is None:
+            print("Error: No *.pbf file found in the script directory.")
+            sys.exit(1)
+        return str(pbf_file)
     except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
+        print(f"An error occurred while trying to read the *.pbf file: {e}")
+        sys.exit(1)
 
 
 # Create the parser
@@ -37,6 +40,7 @@ parser = argparse.ArgumentParser(
 # Add an argument for the PBF file
 parser.add_argument(
     "-pbf",
+    type=Path,
     default=get_default_pbf_file(),
     help="The *.pbf file to process. Default: Uses the alphabetically first *.pbf file in the script directory.",
 )
@@ -58,6 +62,10 @@ args = parser.parse_args()
 def run_subprocess(command):
     command_name = command.split()[0]  # Get the name of the command
     print(f"Running {command_name} with command:\n{str(command)}\n")
+    error_messages = {
+        "osmosis": f"{command_name} failed to extract nodes. Check the error message above.",
+        "gpsbabel": f"{command_name} failed to create GPI-File",
+    }
     try:
         result = subprocess.run(
             command,
@@ -74,14 +82,8 @@ def run_subprocess(command):
         print(
             f"\033[1m\033[31m\033[4m{command_name} Error:\033[0m\n{e.output.decode()}"
         )
-        if command_name == "osmosis":
-            print(
-                f"\033[1m\033[31m\033[4m{command_name} failed to extract nodes. Check the error message above.\033[0m\n"
-            )
-        elif command_name == "gpsbabel":
-            print(
-                f"\033[1m\033[31m\033[4m{command_name} failed to create GPI-File\033[0m\n"
-            )
+        if command_name in error_messages:
+            print(f"\033[1m\033[31m\033[4m{error_messages[command_name]}\033[0m\n")
         sys.exit(1)  # Stop the script with a non-zero exit code
 
 
@@ -103,14 +105,16 @@ def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
     try:
         osm_raw_path = working_path / "osm_raw"
         create_directory(osm_raw_path)
-        osmosis_command = f"""
+        osmosis_command = textwrap.dedent(
+            f"""
         osmosis \\
             --read-pbf {pbf_file}\\
             --node-key-value keyValueList={poi_dict[poi][1]} \\
             --write-xml {osm_raw_path}/{poi}.osm"""
+        )
         exit_status = run_subprocess(osmosis_command)
         if exit_status == 0:  # If the subprocess was successful
-            print(f'Successfully extracted "{poi}" nodes to {osm_raw_path}/{poi}.osm\n')
+            print(f'Successfully extracted "{poi}" nodes to {osm_raw_path}/{poi}.osm')
     except KeyError:
         print(f"Error: The POI '{poi}' is not found in the POI dictionary.")
     except Exception as e:
@@ -175,6 +179,9 @@ def write_xml(root, working_path, poi):
             xml_string = re.sub(" />", "/>", xml_string)
             # Write the modified XML string to the file
             f.write(xml_string)
+        print(
+            f"Successfully wrote filtered nodes to {osm_filtered_path}/filtered_{poi}.osm\n"
+        )
     except PermissionError:
         print(
             f"Error: Permission denied when trying to write to file: {osm_filtered_path}/filtered_{poi}.osm"
@@ -194,24 +201,28 @@ def create_gpi_gpsbabel(working_path, inputdir, poi):
         create_directory(gpipath)
         if inputdir == "osm_filtered":
             osm_filtered_path = working_path / inputdir
-            gpsbabel_command = f"""
+            gpsbabel_command = textwrap.dedent(
+                f"""
             gpsbabel \\
                 -i osm \\
                 -f {osm_filtered_path}/filtered_{poi}.osm \\
                 -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp,unique=0\\
                 -F {gpipath}/{poi}.gpi"""
+            )
 
         else:
             osm_raw_path = working_path / inputdir
-            gpsbabel_command = f"""
+            gpsbabel_command = textwrap.dedent(
+                f"""
             gpsbabel \\
                 -i osm \\
                 -f {osm_raw_path}/{poi}.osm\\
                 -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp,unique=0\\
                 -F {gpipath}/{poi}.gpi"""
+            )
         exit_status = run_subprocess(gpsbabel_command)
         if exit_status == 0:
-            print(f"Created {gpipath}/{poi}.gpi\n")
+            print(f"Created GPI file{gpipath}/{poi}.gpi\n")
     except FileNotFoundError:
         print(f"Error: File not found when trying to create GPI file for POI: {poi}")
     except PermissionError:
@@ -253,7 +264,7 @@ def process_poi(poi, pbf_file_name, poi_dict, working_path):
 
 def main_multi(pbf_file_name):
     start_time = time.time()
-    working_path = Path(__file__).parent
+    working_path = Path.cwd()
     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
     print(f"\n\033[1mUsing multiprocessing...\033[0m")
     # Get the number of cores in the CPU
@@ -280,7 +291,7 @@ def main_multi(pbf_file_name):
 
     # Print the total time
     total_time = end_time - start_time
-    print(f"Total time: {total_time} seconds")
+    print(f"\nTotal time: {total_time:.2f} seconds")
 
 
 ############# NORMAL PROCESSING #############
@@ -288,8 +299,7 @@ def main_multi(pbf_file_name):
 
 def main_single(pbf_file_name):
     start_time = time.time()
-    path_str = os.getcwd()
-    working_path = Path(path_str)
+    working_path = Path.cwd()
     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
     print(f"\n\033[1mUsing single processing...\033[0m")
 
