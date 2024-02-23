@@ -40,6 +40,14 @@ parser.add_argument(
     choices=["true", "false"],
     help=f"Activate node filtering (default: True)",
 )
+parser.add_argument(
+    "-m",
+    metavar="<True/False>",
+    type=lambda s: s.lower(),  # Convert the string to lowercase
+    default="False",
+    choices=["true", "false"],
+    help=f"Activate multiprocessing (default: False)",
+)
 # Parse the arguments
 args = parser.parse_args()
 args.f = args.f == "true"  # Convert the string to a boolean
@@ -108,34 +116,8 @@ def extract_nodes(pbf_file, poi, poi_dict, working_path):
         print(f"An error occurred: {str(e)}")
 
 
-# def filter_nodes(xml_file, dist):
-#     # TODO: Show how many nodes were filtered out in each node
-#     try:
-#         tree = ET.parse(xml_file)
-#     except ET.ParseError:
-#         print(f"Error: The file {xml_file} is not a well-formed XML file.")
-#         sys.exit(1)
-#     root = tree.getroot()
-#     nodes = []
-#     print(f"Filtering out nodes within {dist} meters...")
-#     for node in root.findall("node"):
-#         lat = float(node.get("lat"))
-#         lon = float(node.get("lon"))
-#         if nodes:
-#             for n in nodes:
-#                 if (
-#                     haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist
-#                 ):
-#                     root.remove(node)
-#                     break
-#             else:
-#                 nodes.append((lat, lon, node))
-#         else:
-#             nodes.append((lat, lon, node))
-#     return root
-
-
 def filter_nodes(xml_file, dist):
+    # TODO: Show how many nodes were filtered out in each node
     try:
         tree = ET.parse(xml_file)
     except ET.ParseError:
@@ -258,53 +240,54 @@ def process_poi(poi, pbf_file_name, poi_dict, working_path, filtering):
 
 ############ MULTIPROCESSING ############
 
-# def main(pbf_file_name, filtering):
-#     start_time = time.time()
-#     working_path = Path(__file__).parent
-#     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
-#     print(type(filtering))
-#     if filtering:  # If filtering is activated Green
-#         print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
-#     else:  # If filtering is deactivated Red
-#         print(f"\nFiltering is set to \033[1m\033[31m{filtering}\033[0m\n")
 
-#     try:
-#         with open("POIs.yaml", "r") as poi_file:
-#             poi_dict = yaml.safe_load(poi_file)
-#     except FileNotFoundError:
-#         print("POIs.yaml file not found.")
-#         return
+def main_multi(pbf_file_name, filtering):
+    start_time = time.time()
+    working_path = Path(__file__).parent
+    print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
+    print(f"\n\033[1mUsing multiprocessing...\033[0m")
+    # Get the number of cores in the CPU
+    num_cores = multiprocessing.cpu_count()
+    # Use two less than the number of cores
+    num_processes = max(1, num_cores - 2)
+    print(
+        f"Starting multiprocessing. Using {num_processes} of {multiprocessing.cpu_count()} cores"
+    )
+    if filtering:  # If filtering is activated Green
+        print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
+    else:  # If filtering is deactivated Red
+        print(f"\nFiltering is set to \033[1m\033[31m{filtering}\033[0m\n")
 
-#     # Get the number of cores in the CPU
-#     num_cores = multiprocessing.cpu_count()
-#     # Use two less than the number of cores
-#     num_processes = max(1, num_cores - 2)
-#     print(
-#         f"Starting multiprocessing. Using {num_processes} of {multiprocessing.cpu_count()} cores"
-#     )
-#     with Pool(num_processes) as p:
-#         p.starmap(
-#             process_poi,
-#             [
-#                 (poi, pbf_file_name, poi_dict, working_path, filtering)
-#                 for poi in poi_dict
-#             ],
-#         )
-#     end_time = time.time()
+    try:
+        with open("POIs.yaml", "r") as poi_file:
+            poi_dict = yaml.safe_load(poi_file)
+    except FileNotFoundError:
+        print("POIs.yaml file not found.")
+        return
 
-#     # Print the total time
-#     total_time = end_time - start_time
-#     print(f"Total time: {total_time} seconds")
+    with Pool(num_processes) as p:
+        p.starmap(
+            process_poi,
+            [
+                (poi, pbf_file_name, poi_dict, working_path, filtering)
+                for poi in poi_dict
+            ],
+        )
+    end_time = time.time()
+
+    # Print the total time
+    total_time = end_time - start_time
+    print(f"Total time: {total_time} seconds")
 
 
 ############# NORMAL PROCESSING #############
 
 
-def main(pbf_file_name, filtering):
+def main_single(pbf_file_name, filtering):
     start_time = time.time()
     working_path = Path(__file__).parent
     print(f"\n\033[1m\033[34mProcessing {pbf_file_name}...\033[0m")
-
+    print(f"\n\033[1mUsing single processing...\033[0m")
     if filtering:  # If filtering is activated Green
         print(f"\nFiltering is set to \033[1m\033[32m{filtering}\033[0m\n")
     else:  # If filtering is deactivated Red
@@ -342,4 +325,7 @@ def main(pbf_file_name, filtering):
 
 
 if __name__ == "__main__":
-    main(args.pbf, args.f)
+    if args.m == "true":
+        main_multi(args.pbf, args.f)
+    else:
+        main_single(args.pbf, args.f)
