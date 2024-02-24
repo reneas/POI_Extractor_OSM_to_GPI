@@ -100,6 +100,7 @@ def create_directory(path):
     """
     Create a directory and its parents if they don't exist
     """
+    path = Path(path)  # Convert to Path object
     try:
         if not os.path.exists(path):
             print(f"Creating directory: {path}\n")
@@ -114,19 +115,20 @@ def create_directory(path):
 
 def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
     try:
-        osm_raw_path = os.path.join(f"{working_path}", "osm_raw")
+        osm_raw_path = os.path.join(working_path, "osm_raw")
+        osmosis_output = os.path.join(osm_raw_path, f"{poi}.osm")
         create_directory(osm_raw_path)
         osmosis_command = textwrap.dedent(
             f"""
         osmosis \\
-            --read-pbf {pbf_file}\\
+            --read-pbf {pbf_file} \\
             --node-key-value keyValueList={poi_dict[poi][1]} \\
-            --write-xml {osm_raw_path}/{poi}.osm"""
+            --write-xml {osmosis_output}"""
         )
         exit_status = run_subprocess(osmosis_command)
         if exit_status == 0:  # If the subprocess was successful
             print(
-                f'\033[1mSuccessfully extracted "{poi}" nodes to {osm_raw_path}/{poi}.osm\033[0m'
+                f'\033[1mSuccessfully extracted "{poi}" nodes to {osmosis_output}\033[0m'
             )
     except KeyError:
         print_red(f"Error: The POI '{poi}' is not found in the POI dictionary.")
@@ -157,18 +159,19 @@ def filter_xml(xml_file, dist):
             for n in nodes:
                 if haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist:
                     root.remove(node)  # Remove the node from the tree
-                    removed_nodes += 1  # Increment the counter
+                    # removed_nodes += 1  # Increment the counter
                     break
-                durchlauf += 1
-                print(f"filtering run no. {durchlauf}")
-                print(f"removed {removed_nodes} this run\n")
-                removed_nodes = 0
+                # durchlauf += 1
+                # print(f"filtering run no. {durchlauf}")
+                # print(f"removed {removed_nodes} this run\n")
+                # removed_nodes = 0
             else:
                 nodes.append((lat, lon, node))
         else:
             nodes.append((lat, lon, node))
         # Extract certain tags and write them into the node id
         # write the tags in the order of tag_order
+        # TODO: import tag_order from POIs.yaml
         tag_order = ["amenity", "shop", "website", "opening_hours"]
         tags = [tag for tag in node.findall("tag") if tag.get("k") in tag_order]
         tags.sort(key=lambda tag: tag_order.index(tag.get("k")))
@@ -189,11 +192,12 @@ def filter_xml(xml_file, dist):
 
 def write_xml(root, working_path, poi):
     try:
-        osm_filtered_path = os.path.join(f"{working_path}", "osm_filtered")
+        osm_filtered_path = os.path.join(working_path, "osm_filtered")
+        osm_filtered_output = os.path.join(osm_filtered_path, f"filtered_{poi}.osm")
         create_directory(osm_filtered_path)
-        print(f"Writing filtered nodes to {osm_filtered_path}/filtered_{poi}.osm...\n")
+        print(f"Writing filtered nodes to {osm_filtered_output}...\n")
         # Open the output file in write mode
-        with open(f"{osm_filtered_path}/filtered_{poi}.osm", "w") as f:
+        with open(osm_filtered_output, "w") as f:
             # Write the XML declaration
             f.write("<?xml version='1.0' encoding='UTF-8'?>\n")
             # Write the tree to a string
@@ -206,16 +210,14 @@ def write_xml(root, working_path, poi):
             xml_string = re.sub(" />", "/>", xml_string)
             # Write the modified XML string to the file
             f.write(xml_string)
-        print_green(
-            f"Successfully wrote filtered nodes to {osm_filtered_path}/filtered_{poi}.osm\n"
-        )
+        print_green(f"Successfully wrote filtered nodes to {osm_filtered_output}\n")
     except PermissionError:
         print_red(
-            f"Error: Permission denied when trying to write to file: {osm_filtered_path}/filtered_{poi}.osm"
+            f"Error: Permission denied when trying to write to file: {osm_filtered_output}"
         )
     except OSError as e:
         print_red(
-            f"Error: Unable to write to file: {osm_filtered_path}/filtered_{poi}.osm. Reason: {e.strerror}"
+            f"Error: Unable to write to file: {osm_filtered_output}. Reason: {e.strerror}"
         )
     except Exception as e:
         print_red(f"An error occurred: {str(e)}")
@@ -223,33 +225,34 @@ def write_xml(root, working_path, poi):
 
 def create_gpi_gpsbabel(working_path, inputdir, poi):
     try:
-        iconpath = os.path.join(f"{working_path}", "Icons")
-        gpipath = os.path.join(f"{working_path}", "GPI")
-        create_directory(gpipath)
+        icon_input = os.path.join(working_path, "Icons", f"{poi}.bmp")
+        gpi_path = os.path.join(working_path, "GPI")
+        gpi_output = os.path.join(gpi_path, f"{poi}.gpi")
+        create_directory(gpi_path)
         if inputdir == "osm_filtered":
-            osm_filtered_path = os.path.join(f"{working_path}", "osm_filtered")
+            osm_filtered_path = os.path.join(working_path, "osm_filtered")
             gpsbabel_command = textwrap.dedent(
                 f"""
             gpsbabel \\
                 -i osm \\
-                -f {osm_filtered_path}/filtered_{poi}.osm \\
-                -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp,unique=0\\
-                -F {gpipath}/{poi}.gpi"""
+                -f {os.path.join(osm_filtered_path, f"filtered_{poi}.osm")} \\
+                -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 \\
+                -F {gpi_output}"""
             )
 
         else:
-            osm_raw_path = os.path.join(f"{working_path}", f"{inputdir}")
+            osm_raw_path = os.path.join(working_path, inputdir)
             gpsbabel_command = textwrap.dedent(
                 f"""
-            gpsbabel \\
+           gpsbabel \\
                 -i osm \\
-                -f {osm_raw_path}/{poi}.osm\\
-                -o garmin_gpi,category={poi},bitmap={iconpath}/{poi}.bmp,unique=0\\
-                -F {gpipath}/{poi}.gpi"""
+                -f {os.path.join(osm_raw_path, f"{poi}.osm")} \\
+                -o garmin_gpi,category={poi},bitmap={icon_input},unique=0\\
+                -F {gpi_output}"""
             )
         exit_status = run_subprocess(gpsbabel_command)
         if exit_status == 0:
-            print(f"\033[1mSuccessfully created GPI file{gpipath}/{poi}.gpi\033[0m\n")
+            print(f"\033[1mSuccessfully created GPI file{gpi_path}.gpi\033[0m\n")
     except FileNotFoundError:
         print_red(
             f"Error: File not found when trying to create GPI file for POI: {poi}"
@@ -275,12 +278,13 @@ def is_filtering_activated(filter_arg):
 
 
 def process_poi(poi, pbf_file_name, poi_dict, working_path):
+    osm_filtered_path = os.path.join(working_path, "osm_filtered")
+    osm_raw_path = os.path.join(working_path, "osm_raw")
     try:
         extract_nodes_osmosis(pbf_file_name, poi, poi_dict, working_path)
         if is_filtering_activated(args.f):
             filtered_nodes = filter_xml(
-                # f"{working_path}/osm_raw/{poi}.osm"
-                f"{os.path.join(f'{working_path}', 'osm_raw', f'{poi}.osm')}",
+                f"{os.path.join(osm_raw_path, f'{poi}.osm')}",
                 poi_dict[poi][0],
             )
             write_xml(
@@ -288,9 +292,9 @@ def process_poi(poi, pbf_file_name, poi_dict, working_path):
                 working_path,
                 poi,
             )
-            create_gpi_gpsbabel(working_path, "osm_filtered", poi)
+            create_gpi_gpsbabel(osm_filtered_path, poi)
         else:
-            create_gpi_gpsbabel(working_path, "osm_raw", poi)
+            create_gpi_gpsbabel(osm_raw_path, poi)
     except Exception as e:
         print_red(f"An error occurred while processing POI '{poi}': {str(e)}")
 
@@ -343,15 +347,23 @@ def main_single(pbf_file_name):
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
         print_red("POIs.yaml file not found.")
-        return
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print_red(f"An error occurred while trying to read the POIs.yaml file: {e}")
+        sys.exit(1)
+    except PermissionError:
+        print_red(f"Error: Permission denied when trying to read the POIs.yaml file.")
+        sys.exit(1)
+    except Exception as e:
+        print_red(f"An error occurred while trying to read the POIs.yaml file: {e}")
+        sys.exit(1)
 
     for poi in poi_dict:
         try:
             extract_nodes_osmosis(pbf_file_name, poi, poi_dict, working_path)
             if is_filtering_activated(args.f):
                 filtered_nodes = filter_xml(
-                    # f"{working_path}/osm_raw/{poi}.osm"
-                    f"{os.path.join(f'{working_path}', 'osm_raw', f'{poi}.osm')}",
+                    f"{os.path.join(working_path, 'osm_raw', f'{poi}.osm')}",
                     poi_dict[poi][0],
                 )
                 write_xml(
