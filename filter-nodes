@@ -186,6 +186,9 @@ def process_tags(current_node, selected_keys_list):
         if tag_key in selected_keys_list:
             kept_tags.append(tag)
 
+    # Sort the kept_tags list based on the index of the tag key in the selected_keys_list
+    kept_tags.sort(key=lambda tag: selected_keys_list.index(tag.get("k")))
+
     tag_entries = []
     for tag in kept_tags:
         tag_key = tag.get("k").capitalize()
@@ -204,20 +207,24 @@ def filter_xml(xml_file, dist):
     root, removed_nodes = filter_nodes(root, dist)
     selected_keys_list = [
         "removed_nodes",
+        # identify
+        "name",
+        "brand",
+        # type
         "amenity",
         "shop",
-        "brand",
         "tourism",
-        "fee",
-        "name",
+        "opening_hours",
+        # contact
         "website",
         "contact:website",
-        "opening_hours",
         "phone",
         "contact:phone",
         "mobile",
         "email",
         "contact:email",
+        # detailed information
+        "fee",
         "reservation",
         "caravans",
         "tents",
