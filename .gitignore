@@ -3,3 +3,4 @@ osm_filtered/*
 osm_raw/*
 osmconvert
 bremen*
+.venv

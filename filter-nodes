@@ -136,57 +136,77 @@ def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
         print_red(f"An error occurred: {str(e)}")
 
 
-def filter_xml(xml_file, dist):
+def parse_xml(xml_file):
     xml_filename = Path(xml_file).name
     try:
         tree = ET.parse(xml_file)  # Parse the XML file
     except ET.ParseError:
         print_red(f"ParseError: The file {xml_filename} is not a well-formed XML file.")
         sys.exit(1)
-    root = tree.getroot()  # Get the root of the tree
-    nodes = []
-    print(
-        f"Filtering out nodes from {xml_filename} within {dist} meters of each other..."
-    )
-    # TODO: Show how many nodes were filtered out in each node
-    removed_nodes = 0  # Counter for removed nodes
-    durchlauf = 0
-    for node in root.findall("node"):
-        tag_values = []  # List to store the tag values
-        lat = float(node.get("lat"))
-        lon = float(node.get("lon"))
-        if nodes:
-            for n in nodes:
-                if haversine((lat, lon), (n[0], n[1]), unit=Unit.METERS) < dist:
-                    root.remove(node)  # Remove the node from the tree
-                    # removed_nodes += 1  # Increment the counter
+    root = tree.getroot()  # Get the root of the tree (the <osm> tag)
+    return root
+
+
+def filter_nodes(root, dist):
+    processed_nodes = []
+    all_nodes = root.findall("node")
+    for current_node in all_nodes:
+        lat = float(current_node.get("lat"))
+        lon = float(current_node.get("lon"))
+        # adds the first node to the list and then runs the `for` loop
+        if processed_nodes:
+            for prev_node in processed_nodes:
+                if (
+                    haversine(
+                        (lat, lon), (prev_node[0], prev_node[1]), unit=Unit.METERS
+                    )
+                    < dist
+                ):
+                    root.remove(current_node)
                     break
-                # durchlauf += 1
-                # print(f"filtering run no. {durchlauf}")
-                # print(f"removed {removed_nodes} this run\n")
-                # removed_nodes = 0
             else:
-                nodes.append((lat, lon, node))
+                processed_nodes.append((lat, lon, current_node))
         else:
-            nodes.append((lat, lon, node))
-        # Extract certain tags and write them into the node id
-        # write the tags in the order of tag_order
-        # TODO: import tag_order from POIs.yaml
-        tag_order = ["amenity", "shop", "website", "opening_hours"]
-        tags = [tag for tag in node.findall("tag") if tag.get("k") in tag_order]
-        tags.sort(key=lambda tag: tag_order.index(tag.get("k")))
+            processed_nodes.append((lat, lon, current_node))
+    return root
 
-        # # Add removed_nodes to tag_values
-        # tag_values.append(str(removed_nodes))
 
-        # add a separator between the tags and every 35 chars inside one tag
-        for tag in tags:
-            tag_value = tag.get("v")
-            for i in range(35, len(tag_value), 35):
-                tag_value = tag_value[:i] + "\\" + tag_value[i:]
-            tag_values.append(tag_value)
-        node.set("id", "\\".join(tag_values))
-    # print(f"Total removed nodes: {removed_nodes}")
+def process_tags(current_node, selected_keys_list):
+    all_tags = current_node.findall("tag")
+
+    kept_tags = []
+    for tag in all_tags:
+        tag_key = tag.get("k")
+        if tag_key in selected_keys_list:
+            kept_tags.append(tag)
+
+    tag_entries = []
+    for tag in kept_tags:
+        tag_key = tag.get("k").capitalize()
+        tag_value = tag.get("v")
+        entry = f"{tag_key}: {tag_value}"
+        if len(entry) > 35:
+            entry = "||".join([entry[i : i + 35] for i in range(0, len(entry), 35)])
+        tag_entries.append(entry)
+
+    current_node.set("id", "||".join(tag_entries))
+    return current_node
+
+
+def filter_xml(xml_file, dist):
+    root = parse_xml(xml_file)
+    root = filter_nodes(root, dist)
+    selected_keys_list = [
+        "amenity",
+        "shop",
+        "tourism",
+        "name",
+        "website",
+        "opening_hours",
+    ]
+    all_nodes = root.findall("node")
+    for current_node in all_nodes:
+        current_node = process_tags(current_node, selected_keys_list)
     return root
 
 
@@ -205,7 +225,7 @@ def write_xml(root, working_path, poi):
             # Decode bytes to string
             xml_string = xml_string.decode("utf-8")
             # Replace all '\' characters with '&#xA;'
-            xml_string = xml_string.replace("\\", "&#xA;")
+            xml_string = xml_string.replace("||", "&#xA;")
             # Remove spaces before />
             xml_string = re.sub(" />", "/>", xml_string)
             # Write the modified XML string to the file
