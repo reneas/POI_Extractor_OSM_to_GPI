@@ -1,10 +1,13 @@
 #! /usr/bin/env python3
+# -*- coding: utf-8 -*-
 
+from xml.dom.minidom import parseString, Node
 from haversine import haversine, Unit
 from pathlib import Path
 from multiprocessing import Pool
-import multiprocessing
+from xml.etree.ElementTree import Element, Comment
 import xml.etree.ElementTree as ET
+import multiprocessing
 import os
 import textwrap
 import glob
@@ -149,11 +152,11 @@ def parse_xml(xml_file):
 
 def filter_nodes(root, dist):
     processed_nodes = []
+    removed_nodes = {}
     all_nodes = root.findall("node")
     for current_node in all_nodes:
         lat = float(current_node.get("lat"))
         lon = float(current_node.get("lon"))
-        # adds the first node to the list and then runs the `for` loop
         if processed_nodes:
             for prev_node in processed_nodes:
                 if (
@@ -163,12 +166,15 @@ def filter_nodes(root, dist):
                     < dist
                 ):
                     root.remove(current_node)
+                    removed_nodes[prev_node[2]] = removed_nodes.get(prev_node[2], 0) + 1
                     break
             else:
                 processed_nodes.append((lat, lon, current_node))
+                removed_nodes[current_node] = 0
         else:
             processed_nodes.append((lat, lon, current_node))
-    return root
+            removed_nodes[current_node] = 0
+    return root, removed_nodes
 
 
 def process_tags(current_node, selected_keys_list):
@@ -195,17 +201,37 @@ def process_tags(current_node, selected_keys_list):
 
 def filter_xml(xml_file, dist):
     root = parse_xml(xml_file)
-    root = filter_nodes(root, dist)
+    root, removed_nodes = filter_nodes(root, dist)
     selected_keys_list = [
+        "removed_nodes",
         "amenity",
         "shop",
+        "brand",
         "tourism",
+        "fee",
         "name",
         "website",
+        "contact:website",
         "opening_hours",
+        "phone",
+        "contact:phone",
+        "mobile",
+        "email",
+        "contact:email",
+        "reservation",
+        "caravans",
+        "tents",
+        "fireplace",
+        "leisure",
+        "stars",
     ]
     all_nodes = root.findall("node")
     for current_node in all_nodes:
+        removed_count_tag = Element("tag")
+        removed_count_tag.set("k", "removed_nodes")
+        removed_count_tag.set("v", str(removed_nodes[current_node]))
+        current_node.insert(0, removed_count_tag)
+        current_node.insert(1, Comment("\n "))
         current_node = process_tags(current_node, selected_keys_list)
     return root
 
@@ -216,21 +242,20 @@ def write_xml(root, working_path, poi):
         osm_filtered_output = os.path.join(osm_filtered_path, f"filtered_{poi}.osm")
         create_directory(osm_filtered_path)
         print(f"Writing filtered nodes to {osm_filtered_output}...\n")
-        # Open the output file in write mode
+        # Write the XML declaration
+        xml_string = ET.tostring(root, encoding="utf-8", method="xml")
+        # Decode bytes to string
+        xml_string = xml_string.decode("utf-8")
+        # Remove spaces before />
+        xml_string = re.sub(" />", "/>", xml_string)
+        # Pretty print the XML
+        xml_dom = parseString(xml_string)
+        pretty_xml_string = xml_dom.toprettyxml(indent=" ", newl="")
+        # Replace all '||' characters with '&#xA;'
+        pretty_xml_string = pretty_xml_string.replace("||", "&#xA;")
+        # Write the modified XML string to the file
         with open(osm_filtered_output, "w") as f:
-            # Write the XML declaration
-            f.write("<?xml version='1.0' encoding='UTF-8'?>\n")
-            # Write the tree to a string
-            xml_string = ET.tostring(root, encoding="utf-8", method="xml")
-            # Decode bytes to string
-            xml_string = xml_string.decode("utf-8")
-            # Replace all '\' characters with '&#xA;'
-            xml_string = xml_string.replace("||", "&#xA;")
-            # Remove spaces before />
-            xml_string = re.sub(" />", "/>", xml_string)
-            # Write the modified XML string to the file
-            f.write(xml_string)
-        print_green(f"Successfully wrote filtered nodes to {osm_filtered_output}\n")
+            f.write(pretty_xml_string)
     except PermissionError:
         print_red(
             f"Error: Permission denied when trying to write to file: {osm_filtered_output}"
@@ -240,7 +265,7 @@ def write_xml(root, working_path, poi):
             f"Error: Unable to write to file: {osm_filtered_output}. Reason: {e.strerror}"
         )
     except Exception as e:
-        print_red(f"An error occurred: {str(e)}")
+        print_red(f"An error occurred while writing the filtered XML file: {e}")
 
 
 def create_gpi_gpsbabel(working_path, inputdir, poi):
