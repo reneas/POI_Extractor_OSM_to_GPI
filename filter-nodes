@@ -355,7 +355,7 @@ def main_multi(pbf_file_name):
     )
     is_filtering_activated(args.f)
     try:
-        with open("POIs.yaml", "r") as poi_file:
+        with open("POIs.yaml", "r", encoding="utf-8",errors="replace) as poi_file:
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
         print_red("POIs.yaml file not found.")
@@ -385,7 +385,7 @@ def main_single(pbf_file_name):
     is_filtering_activated(args.f)
 
     try:
-        with open("POIs.yaml", "r") as poi_file:
+        with open("POIs.yaml", "r", encoding="utf-8",errors="replace) as poi_file:
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
         print_red("POIs.yaml file not found.")
