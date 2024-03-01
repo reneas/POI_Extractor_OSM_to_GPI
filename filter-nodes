@@ -129,6 +129,9 @@ def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
             --write-xml {osmosis_output}"""
         )
         exit_status = run_subprocess(osmosis_command)
+        ### Do this in windows
+        # f"""osmosis --read-pbf file=\"{pbf_file}\" --node-key-value keyValueList=\"{poi_dict[poi][1]}\" --write-xml file=\"{osmosis_output}\" """ )
+        # exit_status = run_subprocess(osmosis_command.replace("\\","\\\\"))
         if exit_status == 0:  # If the subprocess was successful
             print(
                 f'\033[1mSuccessfully extracted "{poi}" nodes to {osmosis_output}\033[0m'
