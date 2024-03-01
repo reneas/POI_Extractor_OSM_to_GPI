@@ -264,7 +264,7 @@ def write_xml(root, working_path, poi):
         # Replace all '||' characters with '&#xA;'
         pretty_xml_string = pretty_xml_string.replace("||", "&#xA;")
         # Write the modified XML string to the file
-        with open(osm_filtered_output, "w",encoding="utf-8") as f:
+        with open(osm_filtered_output, "w",encoding="utf-8", errors="replace") as f:
             f.write(pretty_xml_string)
     except PermissionError:
         print_red(
