@@ -17,7 +17,7 @@ import subprocess
 import yaml
 import argparse
 import time
-
+import platform
 
 def print_red(text):
     error_message = print(f"\033[1m\033[31m{text}\033[0m")
@@ -121,17 +121,11 @@ def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
         osm_raw_path = os.path.join(working_path, "osm_raw")
         osmosis_output = os.path.join(osm_raw_path, f"{poi}.osm")
         create_directory(osm_raw_path)
-        osmosis_command = textwrap.dedent(
-            f"""
-        osmosis \\
-            --read-pbf {pbf_file} \\
-            --node-key-value keyValueList={poi_dict[poi][1]} \\
-            --write-xml {osmosis_output}"""
-        )
-        exit_status = run_subprocess(osmosis_command)
-        ### Do this in windows
-        # f"""osmosis --read-pbf file=\"{pbf_file}\" --node-key-value keyValueList=\"{poi_dict[poi][1]}\" --write-xml file=\"{osmosis_output}\" """ )
-        # exit_status = run_subprocess(osmosis_command.replace("\\","\\\\"))
+        osmosis_command = textwrap.dedent(f"""osmosis --read-pbf file=\"{pbf_file}\" --node-key-value keyValueList=\"{poi_dict[poi][1]}\" --write-xml file=\"{osmosis_output}\" """ )
+        if platform.system() == 'Windows':
+            exit_status = run_subprocess(osmosis_command.replace("\\","\\\\"))
+        else:
+            exit_status = run_subprocess(osmosis_command)
         if exit_status == 0:  # If the subprocess was successful
             print(
                 f'\033[1mSuccessfully extracted "{poi}" nodes to {osmosis_output}\033[0m'
@@ -290,9 +284,10 @@ def create_gpi_gpsbabel(working_path, inputdir, poi):
         else:
             osm_raw_path = os.path.join(working_path, inputdir)
             gpsbabel_command = textwrap.dedent(f""" gpsbabel -i osm -f {os.path.join(osm_raw_path, f"{poi}.osm")} -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 -F {gpi_output}""")
-        exit_status = run_subprocess(gpsbabel_command)
-        ### for windows
-        # exit_status = run_subprocess(gpsbabel_command.replace("\\","\\\\"))
+        if platform.system() == 'Windows':
+            exit_status = run_subprocess(gpsbabel_command.replace("\\","\\\\"))
+        else:
+            exit_status = run_subprocess(gpsbabel_command)
         if exit_status == 0:
             print(f"\033[1mSuccessfully created GPI file{gpi_path}.gpi\033[0m\n")
     except FileNotFoundError:
