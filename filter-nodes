@@ -182,8 +182,9 @@ def filter_nodes(root, dist):
 
 def process_tags(current_node, selected_keys_list):
     all_tags = current_node.findall("tag")
-
     kept_tags = []
+
+    # Add the kept tags to list and remove them afterwards
     for tag in all_tags:
         tag_key = tag.get("k")
         if tag_key in selected_keys_list:
@@ -201,8 +202,6 @@ def process_tags(current_node, selected_keys_list):
         if len(entry) > 35:
             entry = "||".join([entry[i : i + 35] for i in range(0, len(entry), 35)])
         tag_entries.append(entry)
-
-    # Remove all tags from the current node
 
     current_node.set("id", "||".join(tag_entries))
     return current_node
