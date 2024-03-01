@@ -188,6 +188,7 @@ def process_tags(current_node, selected_keys_list):
         tag_key = tag.get("k")
         if tag_key in selected_keys_list:
             kept_tags.append(tag)
+        current_node.remove(tag)
 
     # Sort the kept_tags list based on the index of the tag key in the selected_keys_list
     kept_tags.sort(key=lambda tag: selected_keys_list.index(tag.get("k")))
@@ -200,6 +201,8 @@ def process_tags(current_node, selected_keys_list):
         if len(entry) > 35:
             entry = "||".join([entry[i : i + 35] for i in range(0, len(entry), 35)])
         tag_entries.append(entry)
+
+    # Remove all tags from the current node
 
     current_node.set("id", "||".join(tag_entries))
     return current_node
@@ -241,7 +244,6 @@ def filter_xml(xml_file, dist):
         removed_count_tag.set("k", "removed_nodes")
         removed_count_tag.set("v", str(removed_nodes[current_node]))
         current_node.insert(0, removed_count_tag)
-        current_node.insert(1, Comment("\n "))
         current_node = process_tags(current_node, selected_keys_list)
     return root
 
