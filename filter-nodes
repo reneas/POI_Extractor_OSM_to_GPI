@@ -19,6 +19,7 @@ import argparse
 import time
 import platform
 
+
 def print_red(text):
     error_message = print(f"\033[1m\033[31m{text}\033[0m")
     return error_message
@@ -121,9 +122,14 @@ def extract_nodes_osmosis(pbf_file, poi, poi_dict, working_path):
         osm_raw_path = os.path.join(working_path, "osm_raw")
         osmosis_output = os.path.join(osm_raw_path, f"{poi}.osm")
         create_directory(osm_raw_path)
-        osmosis_command = textwrap.dedent(f"""osmosis --read-pbf file=\"{pbf_file}\" --node-key-value keyValueList=\"{poi_dict[poi][1]}\" --write-xml file=\"{osmosis_output}\" """ )
-        if platform.system() == 'Windows':
-            exit_status = run_subprocess(osmosis_command.replace("\\","\\\\"))
+        osmosis_command = textwrap.dedent(
+            f"""osmosis \\
+            --read-pbf file={pbf_file} \\
+            --node-key-value keyValueList={poi_dict[poi][1]} \\
+            --write-xml file={osmosis_output} """
+        )
+        if platform.system() == "Windows":
+            exit_status = run_subprocess(osmosis_command.replace("\\", "\\\\"))
         else:
             exit_status = run_subprocess(osmosis_command)
         if exit_status == 0:  # If the subprocess was successful
@@ -258,7 +264,7 @@ def write_xml(root, working_path, poi):
         # Replace all '||' characters with '&#xA;'
         pretty_xml_string = pretty_xml_string.replace("||", "&#xA;")
         # Write the modified XML string to the file
-        with open(osm_filtered_output, "w",encoding="utf-8", errors="replace") as f:
+        with open(osm_filtered_output, "w", encoding="utf-8", errors="replace") as f:
             f.write(pretty_xml_string)
     except PermissionError:
         print_red(
@@ -280,12 +286,24 @@ def create_gpi_gpsbabel(working_path, inputdir, poi):
         create_directory(gpi_path)
         if inputdir == "osm_filtered":
             osm_filtered_path = os.path.join(working_path, "osm_filtered")
-            gpsbabel_command = textwrap.dedent(f"""gpsbabel -i osm -f {os.path.join(osm_filtered_path, f"filtered_{poi}.osm")} -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 -F {gpi_output}""")
+            gpsbabel_command = textwrap.dedent(
+                f"""gpsbabel \\
+            -i osm \\
+            -f {os.path.join(osm_filtered_path, f"filtered_{poi}.osm")} \\
+            -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 \\
+            -F {gpi_output}"""
+            )
         else:
             osm_raw_path = os.path.join(working_path, inputdir)
-            gpsbabel_command = textwrap.dedent(f""" gpsbabel -i osm -f {os.path.join(osm_raw_path, f"{poi}.osm")} -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 -F {gpi_output}""")
-        if platform.system() == 'Windows':
-            exit_status = run_subprocess(gpsbabel_command.replace("\\","\\\\"))
+            gpsbabel_command = textwrap.dedent(
+                f""" gpsbabel \\
+            -i osm \\
+            -f {os.path.join(osm_raw_path, f"{poi}.osm")} \\
+            -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 \\
+            -F {gpi_output}"""
+            )
+        if platform.system() == "Windows":
+            exit_status = run_subprocess(gpsbabel_command.replace("\\", "\\\\"))
         else:
             exit_status = run_subprocess(gpsbabel_command)
         if exit_status == 0:
@@ -350,7 +368,7 @@ def main_multi(pbf_file_name):
     )
     is_filtering_activated(args.f)
     try:
-        with open("POIs.yaml", "r", encoding="utf-8",errors="replace") as poi_file:
+        with open("POIs.yaml", "r", encoding="utf-8", errors="replace") as poi_file:
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
         print_red("POIs.yaml file not found.")
@@ -380,7 +398,7 @@ def main_single(pbf_file_name):
     is_filtering_activated(args.f)
 
     try:
-        with open("POIs.yaml", "r", encoding="utf-8",errors="replace") as poi_file:
+        with open("POIs.yaml", "r", encoding="utf-8", errors="replace") as poi_file:
             poi_dict = yaml.safe_load(poi_file)
     except FileNotFoundError:
         print_red("POIs.yaml file not found.")
