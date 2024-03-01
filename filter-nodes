@@ -286,26 +286,13 @@ def create_gpi_gpsbabel(working_path, inputdir, poi):
         create_directory(gpi_path)
         if inputdir == "osm_filtered":
             osm_filtered_path = os.path.join(working_path, "osm_filtered")
-            gpsbabel_command = textwrap.dedent(
-                f"""
-            gpsbabel \\
-                -i osm \\
-                -f {os.path.join(osm_filtered_path, f"filtered_{poi}.osm")} \\
-                -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 \\
-                -F {gpi_output}"""
-            )
-
+            gpsbabel_command = textwrap.dedent(f"""gpsbabel -i osm -f {os.path.join(osm_filtered_path, f"filtered_{poi}.osm")} -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 -F {gpi_output}""")
         else:
             osm_raw_path = os.path.join(working_path, inputdir)
-            gpsbabel_command = textwrap.dedent(
-                f"""
-           gpsbabel \\
-                -i osm \\
-                -f {os.path.join(osm_raw_path, f"{poi}.osm")} \\
-                -o garmin_gpi,category={poi},bitmap={icon_input},unique=0\\
-                -F {gpi_output}"""
-            )
+            gpsbabel_command = textwrap.dedent(f""" gpsbabel -i osm -f {os.path.join(osm_raw_path, f"{poi}.osm")} -o garmin_gpi,category={poi},bitmap={icon_input},unique=0 -F {gpi_output}""")
         exit_status = run_subprocess(gpsbabel_command)
+        ### for windows
+        # exit_status = run_subprocess(gpsbabel_command.replace("\\","\\\\"))
         if exit_status == 0:
             print(f"\033[1mSuccessfully created GPI file{gpi_path}.gpi\033[0m\n")
     except FileNotFoundError:
